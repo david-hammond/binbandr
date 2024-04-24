@@ -1,0 +1,21 @@
+Package: binbandr
+Type: Package
+Title: Crates a linear scale from optimal bins on a numeric value
+Version: 0.1.0
+Authors@R: person("David", "Hammond", email = "anotherdavidhammond@gmail.com", role = c("aut", "cre"))
+Author: David Hammond [aut, cre]
+Maintainer: David Hammond <anotherdavidhammond@gmail.com>
+Description: To simplify data transformation, this package provides a function to return a linearly scaled transformation based on outlier detection and optimal binning fo the distribution. It is an approximation that reduces the need to investigate the distribution of every indicator in a dataset when linear normalisation or many datasets is desired.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.2.3
+Imports: 
+    magrittr,
+    dplyr,
+    tidyr,
+    readr,
+    scales,
+    dlookr,
+    rlang,
+    EnvStats
