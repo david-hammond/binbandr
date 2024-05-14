@@ -20,25 +20,7 @@
 #' @export
 #'
 
-binband = function(df, target = "value"){
-    df = df %>%
-    mutate(bins = binning(.data$capped) %>% extract()) %>%
-    separate(.data$bins, c("lower", "upper"), sep = ",", remove = F) %>%
-    mutate(lower = parse_number(.data$lower),
-           upper = parse_number(.data$upper),
-           bins = as.numeric(.data$bins))
-  nbins = max(df$bins)
-  nbins = data.frame(bins = seq(1:nbins)) %>%
-    mutate(       bin_min_threshold = (.data$bins-1)/nbins,
-                  bin_max_threshold = (.data$bins/nbins))
-  df = df %>% left_join(nbins)
-  df = df %>% group_by(.data$bins) %>%
-    mutate(banded = rescale(.data$capped, from = c(.data$lower[1], .data$upper[1]),
-                                    to = c(.data$bin_min_threshold[1], .data$bin_max_threshold[1]))) %>%
-    ungroup() %>%
-    mutate(banded = round(.data$banded, 3))
-  return(df)
-}
+
 
 
 # Class Defintion ---------------------------------------------------------
@@ -59,68 +41,158 @@ newindicator <- R6::R6Class("newindicator",
                               manual_max_outlier_cutoff = NULL,
                               data = NULL,
                               weight = NULL,
-                              initialize = function(df, manual_min_outlier_cutoff = NULL, manual_max_outlier_cutoff = NULL){
-                                ## manual calcs
-                                tmp = get_capping(df$value)
-                                df$capped = tmp$values
-                                df = binband(df)
-                                self$domain = unique(df$domain)
-                                self$ismorebetter = as.logical(unique(df$ismorebetter))
+                              banding_method = NULL,
+                              initialize = function(df,
+                                                    domain,
+                                                    ismorebetter,
+                                                    weight,
+                                                    manual_min_outlier_cutoff = NULL,
+                                                    manual_max_outlier_cutoff = NULL,
+                                                    banding_method = "optimal"){
+                                self$domain = domain
+                                self$ismorebetter = ismorebetter
+                                self$manual_min_outlier_cutoff = manual_min_outlier_cutoff #need to implement
+                                self$manual_max_outlier_cutoff = manual_max_outlier_cutoff
                                 self$variablename <- unique(df$variablename)
                                 self$admin_level <- unique(df$admin_level)
                                 self$source <- unique(df$source)
-                                self$weight <- unique(df$weight)
+                                self$weight <- weight
+                                self$banding_method <- banding_method
+                                tmp = private$get_capping(df$value)
+                                df$capped = tmp$values
+                                df = private$binband(df)
                                 self$optimal_bins <- dlookr::binning(df$value)
                                 self$auto_min_outlier_cutoff <- tmp$caps[1]
                                 self$auto_max_outlier_cutoff <- tmp$caps[2]
-                                self$manual_min_outlier_cutoff = manual_min_outlier_cutoff #need to implement
-                                self$manual_max_outlier_cutoff = manual_max_outlier_cutoff
                                 self$data = df
+                              }
+                            ),
+                            private = list(
+                              binband = function(df,
+                                                 target = "value"){
+                                df = df %>%
+                                  mutate(bins = binning(.data$capped) %>% extract()) %>%
+                                  separate(.data$bins, c("lower", "upper"), sep = ",", remove = F) %>%
+                                  mutate(lower = parse_number(.data$lower),
+                                         upper = parse_number(.data$upper),
+                                         bins = as.numeric(.data$bins))
+                                nbins = max(df$bins)
+                                nbins = data.frame(bins = seq(1:nbins)) %>%
+                                  mutate(       bin_min_threshold = (.data$bins-1)/nbins,
+                                                bin_max_threshold = (.data$bins/nbins))
+                                df = df %>% left_join(nbins)
+                                df = df %>% group_by(.data$bins) %>%
+                                  mutate(banded = rescale(.data$capped, from = c(.data$lower[1], .data$upper[1]),
+                                                          to = c(.data$bin_min_threshold[1], .data$bin_max_threshold[1]))) %>%
+                                  ungroup() %>%
+                                  mutate(banded = round(.data$banded, 3))
+                                if(self$ismorebetter){
+                                  df$banded = 1 - df$banded
+                                }
+                                return(df)
+                              },
+                              get_capping = function(data, cap_ntiles = c(0.01, 0.99)) {
+                                hinges <- quantile(data, probs = c(0.25, 0.75), na.rm = TRUE)
+                                caps <- quantile(data, probs = cap_ntiles, na.rm = TRUE)
+
+                                whisker <- 1.5 * diff(hinges)
+
+                                if(!is.null(self$manual_min_outlier_cutoff)){
+                                  caps[1] = self$manual_min_outlier_cutoff
+                                }
+                                if(!is.null(self$manual_max_outlier_cutoff)){
+                                  caps[2] = self$manual_max_outlier_cutoff
+                                }
+
+                                data[data < (hinges[1] - whisker)] <- caps[1] #this inst right
+                                data[data > (hinges[2] + whisker)] <- caps[2]
+                                list(values = data, caps = caps)
                               }
                             )
 )
 
 
-get_capping <- function(data, cap_ntiles = c(0.01, 0.99)) {
-  hinges <- quantile(data, probs = c(0.25, 0.75), na.rm = TRUE)
-  caps <- quantile(data, probs = cap_ntiles, na.rm = TRUE)
 
-  whisker <- 1.5 * diff(hinges)
-
-  data[data < (hinges[1] - whisker)] <- caps[1]
-  data[data > (hinges[2] + whisker)] <- caps[2]
-  list(values = data, caps = caps)
-}
 
 
 newindex <- R6::R6Class("newindex",
                             lock_objects = FALSE,
                             public = list(
                               name = NULL,
+                              start_year = NULL,
+                              end_year = NULL,
                               structure = NULL,
                               indicators = list(),
                               corpus = NULL,
                               dm = NULL,
-                              initialize = function(name){
+                              initialize = function(name, start_year, end_year){
                                 self$name = name
+                                self$start_year = start_year
+                                self$end_year = end_year
                               },
-                              addIndicator = function(df){
-                                self$indicators = c(self$indicators, newindicator$new(df))
+                              addIndicator = function(df,
+                                                      domain,
+                                                      ismorebetter,
+                                                      weight,
+                                                      manual_min_outlier_cutoff = NULL,
+                                                      manual_max_outlier_cutoff = NULL,
+                                                      banding_method = "optimal"){
+                                self$indicators = c(self$indicators, newindicator$new(df %>%
+                                                                                      filter(between(year, self$start_year, self$end_year)),
+                                                                                      domain,
+                                                                                      ismorebetter,
+                                                                                      weight,
+                                                                                      manual_min_outlier_cutoff,
+                                                                                      manual_max_outlier_cutoff,
+                                                                                      banding_method))
                                 self$corpus = self$corpus %>% rbind(last(self$indicators)$data)
-                                self$dm = dm_decompose(self$corpus)
-                                tmp = self$dm$meta
+                                tmp = decompose_table(self$corpus, vuid, domain, variablename, source, ismorebetter, admin_level, weight)$parent_table
                                 tmp$pathString = paste(self$name,
-                                                       tmp$domain,
-                                                       tmp$variablename,
-                                                       sep = "/")
+                                                     tmp$domain,
+                                                     tmp$variablename,
+                                                     sep = "/")
                                 self$structure = as.Node(tmp)
+                                self$dm = dm_decompose(self$corpus)
+
+                              },
+                              calcIndex = function(){
+                                #calculate
+
                               },
                               export_to_db = function(dbname){
                                 con <- DBI::dbConnect(RSQLite::SQLite(), dbname)
                                 copy_dm_to(con, self$dm, set_key_constraints = TRUE, temporary = F)
                                 dbDisconnect(con)
                               }
-                            )
+                            ),
+                        private = list(
+                          fill_missing_values = function(df) {
+                            df = df %>%
+                              group_by(vuid, guid) %>%
+                              complete(year = full_seq(year, 1)) %>%
+                              mutate(interpolated = zoo::na.approx(banded, na.rm = FALSE)) %>%
+                              ungroup() %>%
+                              mutate(imputed = ifelse(is.na(banded), 1, 0),
+                                     banded = interpolated) %>%
+                              select(-interpolated) %>%
+                              complete(guid, vuid, year = full_seq(year, 1))
+
+
+                            raw_pivot =  df %>% group_by(vuid, guid, year) %>% summarise(banded = mean(banded)) %>%
+                              ungroup() %>% spread(vuid, banded)
+                            names(raw_pivot) = make.names(names(raw_pivot))
+                            imp = mice(raw_pivot[-c(1:2)],)
+                            raw_pivot[-c(1:2)] = complete(imp)
+                            raw_pivot = raw_pivot %>% gather(vuid, mice, -c(guid, year)) %>%
+                              mutate(vuid = parse_number(vuid))
+
+                            df = df %>% left_join(raw_pivot)
+                            df = df %>% mutate(imputed = ifelse(is.na(banded), 2, imputed),
+                                               banded = ifelse(is.na(banded), mice, banded)) %>%
+                              select(-mice)
+                            return(df)
+                          }
+                        )
 
 )
 
