@@ -6,7 +6,7 @@
 #'
 #' @importFrom R6 R6Class
 #' @importFrom dlookr binning extract
-#' @importFrom dplyr mutate left_join group_by ungroup filter summarise relocate
+#' @importFrom dplyr mutate left_join group_by ungroup filter summarise relocate distinct
 #' @importFrom tidyr separate fill
 #' @importFrom scales rescale
 #' @importFrom readr parse_number
@@ -15,6 +15,7 @@
 #' @importFrom data.tree as.Node SetFormat FormatPercent
 #' @importFrom dm decompose_table dm dm_add_pk dm_add_fk dm_flatten_to_tbl dm_draw
 #' @importFrom mice mice
+#' @importFrom vctrs vec_duplicate_detect
 #'
 #' @export
 #'
@@ -44,7 +45,18 @@ newIndex <- R6::R6Class("newIndex",
                                                       manual_min_outlier_cutoff = NULL,
                                                       manual_max_outlier_cutoff = NULL,
                                                       banding_method = "optimal"){
-                                df = df %>% select(geocode, geoname, admin_level, variablename, year, value, source)
+                                options(error = NULL)
+                                df = df %>% distinct()
+                                test1 = setdiff(names(df), required_cols)
+                                test2 = vec_duplicate_detect(df %>% select(geocode, variablename, year))
+                                if(length(test1) > 0){
+                                  stop(paste("Your data frame is missing the following required columns:", paste(test1, collapse = ",")))
+                                }
+                                if(sum(test2) > 0){
+                                  print(df[test2,])
+                                  stop("You have duplicated data in your data.frame, check the above entires, fix and retry")
+                                }
+                                df = df %>% select(required_cols)
                                 df$geoparent = substr(df$geocode,1,3)
                                 df = df %>% relocate(geoparent)
                                 self$indicators = c(self$indicators, newIndicator$new(df %>%
@@ -304,7 +316,7 @@ newIndicator <- R6::R6Class("newIndicator",
 )
 
 
-
+required_cols = c("geocode", "geoname", "admin_level", "variablename", "year", "value", "source")
 
 
 
