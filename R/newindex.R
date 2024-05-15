@@ -27,11 +27,11 @@ newindex <- R6::R6Class("newindex",
                               name = NULL,
                               start_year = NULL,
                               end_year = NULL,
-                              tree = NULL,
                               indicators = list(),
+                              tree = NULL,
                               corpus = NULL,
                               dm = NULL,
-                              imputed = NULL,
+                              indexflatdata = NULL,
                               initialize = function(name, start_year, end_year){
                                 self$name = name
                                 self$start_year = start_year
@@ -45,7 +45,7 @@ newindex <- R6::R6Class("newindex",
                                                       manual_max_outlier_cutoff = NULL,
                                                       banding_method = "optimal"){
                                 df = df %>% select(geocode, geoname, admin_level, variablename, year, value, source)
-                                df$geoparent = ifelse(parse_number(df$admin_level[1])  == 0, df$geocode, substr(df$geocode,1,3))
+                                df$geoparent = substr(df$geocode,1,3)
                                 df = df %>% relocate(geoparent)
                                 self$indicators = c(self$indicators, newindicator$new(df %>%
                                                                                       filter(between(year, self$start_year, self$end_year)),
@@ -77,6 +77,7 @@ newindex <- R6::R6Class("newindex",
                               calcIndex = function(){
                                 self$dm = private$raw_dm(self$corpus)
                                 self$dm = private$imputed_dm()
+                                self$indexflatdata = private$getFlatData()
                                 # con <- DBI::dbConnect(RSQLite::SQLite(), paste0(self$name, ".sqlite"))
                                 # copy_dm_to(con, self$dm, set_key_constraints = TRUE, temporary = F)
                                 # dbDisconnect(con)
@@ -165,7 +166,8 @@ newindex <- R6::R6Class("newindex",
                               dm_add_fk(data, imputed, imp_key) %>%
                               dm_add_fk(world_average, vuid, meta) %>%
                               dm_add_fk(overall_scores, guid, geo) %>%
-                              dm_add_fk(imputed_pc, guid, geo)
+                              dm_add_fk(imputed_pc, guid, geo) %>%
+                              dm_add_fk(overall_scores, imputed, imp_key)
                             message("Done...")
                             return(x)
 
@@ -183,8 +185,21 @@ newindex <- R6::R6Class("newindex",
                               mutate(variablename = paste(ni$name, "Overall Score")) %>%
                               ungroup() %>%
                               select(guid, variablename, year, weight, banded)
-                            all = domain_scores %>% rbind(overall_score)
+                            all = domain_scores %>% rbind(overall_score) %>%
+                              mutate(domain = self$name, value = banded, imputed = 0) %>%
+                              select(domain, variablename, guid, year, value, banded, imputed)
                             return(all)
+                          },
+                          getFlatData = function(){
+                            x = self$dm %>% dm_flatten_to_tbl(.start = overall_scores) %>%
+                              select(-guid, -imputed)
+                            y = self$dm %>% dm_flatten_to_tbl(.start = data)
+                            z = x %>% rbind(y[,names(x)])
+                            y = self$dm %>% dm_flatten_to_tbl(.start = imputed_pc) %>%
+                              select(-guid)
+                            z = z %>% left_join(y) %>%
+                              relocate(geoparent, geocode, geoname)
+                            return(z)
                           }
 
                         )
