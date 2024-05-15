@@ -21,7 +21,7 @@
 
 
 
-newindex <- R6::R6Class("newindex",
+newIndex <- R6::R6Class("newIndex",
                             lock_objects = FALSE,
                             public = list(
                               name = NULL,
@@ -47,7 +47,7 @@ newindex <- R6::R6Class("newindex",
                                 df = df %>% select(geocode, geoname, admin_level, variablename, year, value, source)
                                 df$geoparent = substr(df$geocode,1,3)
                                 df = df %>% relocate(geoparent)
-                                self$indicators = c(self$indicators, newindicator$new(df %>%
+                                self$indicators = c(self$indicators, newIndicator$new(df %>%
                                                                                       filter(between(year, self$start_year, self$end_year)),
                                                                                       domain,
                                                                                       ismorebetter,
@@ -70,11 +70,11 @@ newindex <- R6::R6Class("newindex",
                                 names(self$indicators) = self$dm$meta$vcode
 
                               },
-                              structure = function(){
+                              viewStructure = function(){
                                 SetFormat(self$tree, "weight", formatFun = FormatPercent)
                                 print(self$tree, "source", "weight")
                               },
-                              calcIndex = function(){
+                              calculateIndex = function(){
                                 self$dm = private$raw_dm(self$corpus)
                                 self$dm = private$imputed_dm()
                                 self$indexflatdata = private$getFlatData()
@@ -209,7 +209,7 @@ newindex <- R6::R6Class("newindex",
 # Class Defintion ---------------------------------------------------------
 # This class is used to represent a "task" in our R program.
 
-newindicator <- R6::R6Class("newindicator",
+newIndicator <- R6::R6Class("newIndicator",
                             lock_objects = FALSE,
                             public = list(
                               domain = NULL,
@@ -286,14 +286,15 @@ newindicator <- R6::R6Class("newindicator",
                                 whisker <- 1.5 * diff(hinges)
 
                                 if(!is.null(self$manual_min_outlier_cutoff)){
-                                  caps[1] = self$manual_min_outlier_cutoff
+                                  data[data < self$manual_min_outlier_cutoff] <- self$manual_min_outlier_cutoff
+                                }else{
+                                  data[data < (hinges[1] - whisker)] <- caps[1]
                                 }
                                 if(!is.null(self$manual_max_outlier_cutoff)){
-                                  caps[2] = self$manual_max_outlier_cutoff
+                                  data[data > self$manual_max_outlier_cutoff] <- self$manual_max_outlier_cutoff
+                                }else{
+                                  data[data > (hinges[2] + whisker)] <- caps[2]
                                 }
-
-                                data[data < (hinges[1] - whisker)] <- caps[1] #this inst right
-                                data[data > (hinges[2] + whisker)] <- caps[2]
                                 list(values = data, caps = caps)
                               }
                             )

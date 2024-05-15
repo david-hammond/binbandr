@@ -2,7 +2,7 @@
 # library(tidyverse)
 # all = rio::import("./data/all-banded.xlsx") %>% mutate(admin_level = "level0")
 #
-# ni = newindex$new("David", start_year = 2015, end_year = 2024)
+# ni = newIndex$new("David", start_year = 2015, end_year = 2024)
 # tmp = split(all, factor(all$variablename))
 # for (i in tmp){
 #   ni$addIndicator(i,
@@ -13,8 +13,8 @@
 #                   manual_max_outlier_cutoff = NULL,
 #                   banding_method = "optimal")
 # }
-# ni$structure()
-# ni$calcIndex()
+# ni$viewStructure()
+# ni$calculateIndex()
 # ni$viewERDiagram()
 #
 #
