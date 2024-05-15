@@ -59,8 +59,11 @@ newIndex <- R6::R6Class("newIndex",
                                 df$ismorebetter = ismorebetter
                                 df$weight = weight
                                 df$domain = domain
+                                df$lowercutoff = ifelse(is.null(manual_min_outlier_cutoff), last(self$indicators)$auto_min_outlier_cutoff)
+                                df$uppercutoff = ifelse(is.null(manual_max_outlier_cutoff), last(self$indicators)$auto_max_outlier_cutoff)
+                                df$banding_method = banding_method
                                 self$corpus = self$corpus %>% rbind(df)
-                                tmp = decompose_table(self$corpus, vuid, domain, variablename, source, ismorebetter, admin_level, weight)$parent_table
+                                tmp = decompose_table(self$corpus, vuid, domain, variablename, source, ismorebetter, admin_level, weight, lowercutoff, uppercutoff, banding_method)$parent_table
                                 tmp$pathString = paste(self$name,
                                                      tmp$domain,
                                                      tmp$variablename,
@@ -118,7 +121,7 @@ newIndex <- R6::R6Class("newIndex",
                             return(df)
                           },
                           raw_dm = function(df){
-                            x = decompose_table(df, vuid, domain, variablename, source, ismorebetter, admin_level, weight)
+                            x = decompose_table(df, vuid, domain, variablename, source, ismorebetter, admin_level, weight, lowercutoff, uppercutoff, banding_method)
                             meta = x$parent_table
                             meta$vcode = toupper(paste(meta$domain, meta$variablename))
                             meta$vcode = make.unique(abbreviate(abbreviate(toupper(meta$vcode), 3),3) )
