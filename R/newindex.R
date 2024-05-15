@@ -7,13 +7,13 @@
 #' @importFrom R6 R6Class
 #' @importFrom dlookr binning extract
 #' @importFrom dplyr mutate left_join group_by ungroup filter summarise relocate
-#' @importFrom tidyr separate
+#' @importFrom tidyr separate fill
 #' @importFrom scales rescale
 #' @importFrom readr parse_number
 #' @importFrom rlang .data
 #' @importFrom RSQLite dbConnect dbDisconnect SQLite
-#' @importFrom data.tree as.Node
-#' @importFrom dm decompose_table dm dm_add_pk dm_add_fk
+#' @importFrom data.tree as.Node SetFormat FormatPercent
+#' @importFrom dm decompose_table dm dm_add_pk dm_add_fk dm_flatten_to_tbl dm_draw
 #' @importFrom mice mice
 #'
 #' @export
@@ -81,17 +81,21 @@ newindex <- R6::R6Class("newindex",
                                 # copy_dm_to(con, self$dm, set_key_constraints = TRUE, temporary = F)
                                 # dbDisconnect(con)
 
+                              },
+                              viewERDiagram = function(){
+                                self$dm %>% dm_draw()
                               }
                             ),
                         private = list(
                           fill_missing_values = function(df) {
+                            message("Interpolating...")
                             df = df %>%
                               group_by(vuid, guid) %>%
                               complete(year = full_seq(year, 1)) %>%
                               mutate(interpolated = zoo::na.approx(banded, na.rm = FALSE)) %>%
                               fill(interpolated, .direction =  "updown") %>% #this doesn't extrapolate
                               ungroup() %>%
-                              mutate(imputed = ifelse(is.na(banded), 1, imputed),
+                              mutate(imputed = ifelse(is.na(banded), 1, 0),
                                      banded = interpolated) %>%
                               select(-interpolated) %>%
                               complete(guid, vuid, year = full_seq(year, 1))
@@ -100,7 +104,8 @@ newindex <- R6::R6Class("newindex",
                             raw_pivot =  df %>% group_by(vuid, guid, year) %>% summarise(banded = mean(banded)) %>%
                               ungroup() %>% spread(vuid, banded)
                             names(raw_pivot) = make.names(names(raw_pivot))
-                            imp = mice(raw_pivot[-c(1:2)],)
+                            message("Imputing...")
+                            imp = mice(raw_pivot[-c(1:2)], print = FALSE)
                             raw_pivot[-c(1:2)] = complete(imp)
                             raw_pivot = raw_pivot %>% gather(vuid, mice, -c(guid, year)) %>%
                               mutate(vuid = parse_number(vuid))
@@ -129,7 +134,7 @@ newindex <- R6::R6Class("newindex",
 
                           },
                           imputed_dm = function(){
-                            imputed_data = fill_missing_values(self$dm$data)
+                            imputed_data = private$fill_missing_values(self$dm$data)
                             world_average = imputed_data %>% group_by(vuid, year) %>%
                               summarise(mean_value = mean(value, na.rm = T),
                                         mean_banded = mean(banded, na.rm = T)) %>%
@@ -144,8 +149,8 @@ newindex <- R6::R6Class("newindex",
                               dm_add_fk(data, vuid, meta) %>%
                               dm_add_fk(data, guid, geo) %>%
                               dm_add_fk(world_average, vuid, meta)
-
-                            overall_scores = calculate_index(x)
+                            message("Calculating Index...")
+                            overall_scores = private$calculate_index(x)
                             imp_key = data.frame(imputed = c(0,1,2),
                                                  imptype = c("Original", "Interpolated/Extrapolated", "Multi Chain Imputation"),
                                                  impcategory = c("None", "Cold Deck", "Hot Deck"))
@@ -161,11 +166,12 @@ newindex <- R6::R6Class("newindex",
                               dm_add_fk(world_average, vuid, meta) %>%
                               dm_add_fk(overall_scores, guid, geo) %>%
                               dm_add_fk(imputed_pc, guid, geo)
+                            message("Done...")
                             return(x)
 
                           },
                           calculate_index = function(x){
-                            domain_scores = x %>% dm_squash_to_tbl(data) %>%
+                            domain_scores = x %>% dm_flatten_to_tbl(.start = data) %>%
                               group_by(guid, domain, year) %>%
                               mutate(banded = weight * banded) %>%
                               summarise(banded = sum(banded)/sum(weight), weight = sum(weight)) %>%
@@ -184,5 +190,102 @@ newindex <- R6::R6Class("newindex",
                         )
 
 )
+
+# Class Defintion ---------------------------------------------------------
+# This class is used to represent a "task" in our R program.
+
+newindicator <- R6::R6Class("newindicator",
+                            lock_objects = FALSE,
+                            public = list(
+                              domain = NULL,
+                              admin_level = NULL,
+                              variablename = NULL,
+                              source = NULL,
+                              ismorebetter = NULL,
+                              optimal_bins = NULL,
+                              auto_min_outlier_cutoff = NULL,
+                              auto_max_outlier_cutoff = NULL,
+                              manual_min_outlier_cutoff = NULL,
+                              manual_max_outlier_cutoff = NULL,
+                              data = NULL,
+                              weight = NULL,
+                              banding_method = NULL,
+                              imputation_type = NULL,
+                              initialize = function(df,
+                                                    domain,
+                                                    ismorebetter,
+                                                    weight,
+                                                    manual_min_outlier_cutoff = NULL,
+                                                    manual_max_outlier_cutoff = NULL,
+                                                    banding_method = "optimal",
+                                                    imputation_type = "mice"){
+                                self$domain = domain
+                                self$ismorebetter = ismorebetter
+                                self$manual_min_outlier_cutoff = manual_min_outlier_cutoff #need to implement
+                                self$manual_max_outlier_cutoff = manual_max_outlier_cutoff
+                                self$variablename <- unique(df$variablename)
+                                self$admin_level <- unique(df$admin_level)
+                                self$source <- unique(df$source)
+                                self$weight <- weight
+                                self$banding_method <- banding_method
+                                tmp = private$get_capping(df$value)
+                                df$capped = tmp$values
+                                df = private$binband(df)
+                                self$optimal_bins <- dlookr::binning(df$value)
+                                self$auto_min_outlier_cutoff <- tmp$caps[1]
+                                self$auto_max_outlier_cutoff <- tmp$caps[2]
+                                self$data = df
+                              },
+                              distribution = function(){
+                                plot(self$optimal_bins)
+                              }
+                            ),
+                            private = list(
+                              binband = function(df,
+                                                 target = "value"){
+                                df = df %>%
+                                  mutate(bins = binning(.data$capped) %>% extract()) %>%
+                                  separate(.data$bins, c("lower", "upper"), sep = ",", remove = F) %>%
+                                  mutate(lower = parse_number(.data$lower),
+                                         upper = parse_number(.data$upper),
+                                         bins = as.numeric(.data$bins))
+                                nbins = max(df$bins)
+                                nbins = data.frame(bins = seq(1:nbins)) %>%
+                                  mutate(       bin_min_threshold = (.data$bins-1)/nbins,
+                                                bin_max_threshold = (.data$bins/nbins))
+                                df = df %>% left_join(nbins)
+                                df = df %>% group_by(.data$bins) %>%
+                                  mutate(banded = rescale(.data$capped, from = c(.data$lower[1], .data$upper[1]),
+                                                          to = c(.data$bin_min_threshold[1], .data$bin_max_threshold[1]))) %>%
+                                  ungroup() %>%
+                                  mutate(banded = round(.data$banded, 3))
+                                if(self$ismorebetter){
+                                  df$banded = 1 - df$banded
+                                }
+                                return(df)
+                              },
+                              get_capping = function(data, cap_ntiles = c(0.01, 0.99)) {
+                                hinges <- quantile(data, probs = c(0.25, 0.75), na.rm = TRUE)
+                                caps <- quantile(data, probs = cap_ntiles, na.rm = TRUE)
+
+                                whisker <- 1.5 * diff(hinges)
+
+                                if(!is.null(self$manual_min_outlier_cutoff)){
+                                  caps[1] = self$manual_min_outlier_cutoff
+                                }
+                                if(!is.null(self$manual_max_outlier_cutoff)){
+                                  caps[2] = self$manual_max_outlier_cutoff
+                                }
+
+                                data[data < (hinges[1] - whisker)] <- caps[1] #this inst right
+                                data[data > (hinges[2] + whisker)] <- caps[2]
+                                list(values = data, caps = caps)
+                              }
+                            )
+)
+
+
+
+
 
 

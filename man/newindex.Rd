@@ -14,6 +14,7 @@ non-outlier data
 \item \href{#method-newindex-addIndicator}{\code{newindex$addIndicator()}}
 \item \href{#method-newindex-structure}{\code{newindex$structure()}}
 \item \href{#method-newindex-calcIndex}{\code{newindex$calcIndex()}}
+\item \href{#method-newindex-viewERDiagram}{\code{newindex$viewERDiagram()}}
 \item \href{#method-newindex-clone}{\code{newindex$clone()}}
 }
 }
@@ -58,6 +59,15 @@ non-outlier data
 \subsection{Method \code{calcIndex()}}{
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{newindex$calcIndex()}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-newindex-viewERDiagram"></a>}}
+\if{latex}{\out{\hypertarget{method-newindex-viewERDiagram}{}}}
+\subsection{Method \code{viewERDiagram()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{newindex$viewERDiagram()}\if{html}{\out{</div>}}
 }
 
 }

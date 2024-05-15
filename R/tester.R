@@ -1,10 +1,6 @@
+# library(binbandr)
 # library(tidyverse)
-# library(dlookr)
-# library(scales)
-# library(dm)
-# library(data.tree)
-# library(mice)
-# all = rio::import("all-banded.xlsx") %>% mutate(admin_level = "level0")
+# all = rio::import("./data/all-banded.xlsx") %>% mutate(admin_level = "level0")
 #
 # ni = newindex$new("David", start_year = 2015, end_year = 2024)
 # tmp = split(all, factor(all$variablename))
@@ -19,7 +15,7 @@
 # }
 # ni$structure()
 # ni$calcIndex()
-# ni$dm %>% dm_draw()
+# ni$viewERDiagram()
 #
 #
 # birds <- Node$new("Aves", vulgo = "Bird")
