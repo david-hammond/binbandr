@@ -22,4 +22,5 @@ Imports:
     data.tree,
     mice,
     R6,
-    vctrs
+    vctrs,
+    dm

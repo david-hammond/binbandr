@@ -2,10 +2,8 @@
 #'
 #' Finds outliers and then bands between 0 and 1 on optimal bins of
 #' non-outlier data
-#'
-#'
-#' @importFrom R6 R6Class
 #' @importFrom dlookr binning extract
+#' @importFrom R6 R6Class
 #' @importFrom dplyr mutate left_join group_by ungroup filter summarise relocate distinct
 #' @importFrom tidyr separate fill
 #' @importFrom scales rescale
@@ -261,12 +259,13 @@ newIndicator <- R6::R6Class("newIndicator",
                                 tmp = private$get_capping(df$value)
                                 df$capped = tmp$values
                                 df = private$binband(df)
-                                self$optimal_bins <- dlookr::binning(df$value)
+                                self$optimal_bins <- binning(df$value)
                                 self$auto_min_outlier_cutoff <- tmp$caps[1]
                                 self$auto_max_outlier_cutoff <- tmp$caps[2]
                                 self$data = df
                               },
-                              distribution = function(){
+                              viewDistribution = function(){
+                                require("dlookr")
                                 plot(self$optimal_bins)
                               }
                             ),
@@ -317,6 +316,4 @@ newIndicator <- R6::R6Class("newIndicator",
 
 
 required_cols = c("geocode", "geoname", "admin_level", "variablename", "year", "value", "source")
-
-
 
