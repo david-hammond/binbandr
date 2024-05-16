@@ -337,6 +337,7 @@ newIndicator <- R6::R6Class("newIndicator",
                                 return(df)
                               },
                               get_capping = function(data, cap_ntiles = c(0.01, 0.99)) {
+                                #TODO - this can punish countries by assigning them a higher score.
                                 hinges <- quantile(data, probs = c(0.25, 0.75), na.rm = TRUE)
                                 caps <- quantile(data, probs = cap_ntiles, na.rm = TRUE)
 
