@@ -58,7 +58,7 @@ non-outlier data
 \if{latex}{\out{\hypertarget{method-newIndex-calculateIndex}{}}}
 \subsection{Method \code{calculateIndex()}}{
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{newIndex$calculateIndex()}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{newIndex$calculateIndex(export_to_db = FALSE)}\if{html}{\out{</div>}}
 }
 
 }

@@ -10,8 +10,8 @@
 #' @importFrom readr parse_number
 #' @importFrom rlang .data
 #' @importFrom RSQLite dbConnect dbDisconnect SQLite
-#' @importFrom data.tree as.Node SetFormat FormatPercent
-#' @importFrom dm decompose_table dm dm_add_pk dm_add_fk dm_flatten_to_tbl dm_draw
+#' @importFrom data.tree as.Node SetFormat FormatPercent FormatFixedDecimal
+#' @importFrom dm decompose_table dm dm_add_pk dm_add_fk dm_flatten_to_tbl dm_draw copy_dm_to
 #' @importFrom mice mice
 #' @importFrom vctrs vec_duplicate_detect
 #'
@@ -72,8 +72,24 @@ newIndex <- R6::R6Class("newIndex",
                                 df$lowercutoff = ifelse(is.null(manual_min_outlier_cutoff), last(self$indicators)$auto_min_outlier_cutoff)
                                 df$uppercutoff = ifelse(is.null(manual_max_outlier_cutoff), last(self$indicators)$auto_max_outlier_cutoff)
                                 df$banding_method = banding_method
+                                df$year_earliest = last(self$indicators)$year_earliest
+                                df$year_latest = last(self$indicators)$year_latest
+                                df$number_of_geos = last(self$indicators)$number_of_geos
                                 self$corpus = self$corpus %>% rbind(df)
-                                tmp = decompose_table(self$corpus, vuid, domain, variablename, source, ismorebetter, admin_level, weight, lowercutoff, uppercutoff, banding_method)$parent_table
+                                tmp = decompose_table(self$corpus,
+                                                      vuid,
+                                                      domain,
+                                                      variablename,
+                                                      source,
+                                                      ismorebetter,
+                                                      admin_level,
+                                                      weight,
+                                                      lowercutoff,
+                                                      uppercutoff,
+                                                      banding_method,
+                                                      year_earliest,
+                                                      year_latest,
+                                                      number_of_geos)$parent_table
                                 tmp$pathString = paste(self$name,
                                                      tmp$domain,
                                                      tmp$variablename,
@@ -84,16 +100,22 @@ newIndex <- R6::R6Class("newIndex",
 
                               },
                               viewStructure = function(){
-                                SetFormat(self$tree, "weight", formatFun = FormatPercent)
-                                print(self$tree, "source", "weight")
+                                SetFormat(self$tree, "weight", formatFun = function(x) FormatFixedDecimal(x, digits = 3))
+                                SetFormat(self$tree, "year_earliest", formatFun = function(x) FormatFixedDecimal(x, digits = 0))
+                                SetFormat(self$tree, "year_latest", formatFun = function(x) FormatFixedDecimal(x, digits = 0))
+                                SetFormat(self$tree, "number_of_geos", formatFun = function(x) FormatFixedDecimal(x, digits = 0))
+                                print(self$tree, "source", "weight", "year_earliest", "year_latest", "number_of_geos")
                               },
-                              calculateIndex = function(){
+                              calculateIndex = function(export_to_db = FALSE){
                                 self$dm = private$raw_dm(self$corpus)
                                 self$dm = private$imputed_dm()
                                 self$indexflatdata = private$getFlatData()
-                                # con <- DBI::dbConnect(RSQLite::SQLite(), paste0(self$name, ".sqlite"))
-                                # copy_dm_to(con, self$dm, set_key_constraints = TRUE, temporary = F)
-                                # dbDisconnect(con)
+                                if(export_to_db){
+                                  con <- DBI::dbConnect(RSQLite::SQLite(), paste0(self$name, ".sqlite"))
+                                  copy_dm_to(con, self$dm, set_key_constraints = TRUE, temporary = F)
+                                  dbDisconnect(con)
+                                }
+
 
                               },
                               viewERDiagram = function(){
@@ -131,7 +153,19 @@ newIndex <- R6::R6Class("newIndex",
                             return(df)
                           },
                           raw_dm = function(df){
-                            x = decompose_table(df, vuid, domain, variablename, source, ismorebetter, admin_level, weight, lowercutoff, uppercutoff, banding_method)
+                            x = decompose_table(df, vuid,
+                                                domain,
+                                                variablename,
+                                                source,
+                                                ismorebetter,
+                                                admin_level,
+                                                weight,
+                                                lowercutoff,
+                                                uppercutoff,
+                                                banding_method,
+                                                year_earliest,
+                                                year_latest,
+                                                number_of_geos)
                             meta = x$parent_table
                             meta$vcode = toupper(paste(meta$domain, meta$variablename))
                             meta$vcode = make.unique(abbreviate(abbreviate(toupper(meta$vcode), 3),3) )
@@ -240,6 +274,9 @@ newIndicator <- R6::R6Class("newIndicator",
                               banding_method = NULL,
                               imputation_type = NULL,
                               type_of_data = NULL,
+                              year_earliest = NULL,
+                              year_latest = NULL,
+                              number_of_geos = NULL,
                               initialize = function(df,
                                                     domain,
                                                     ismorebetter,
@@ -264,6 +301,9 @@ newIndicator <- R6::R6Class("newIndicator",
                                 self$optimal_bins <- binning(df$value)
                                 self$auto_min_outlier_cutoff <- tmp$caps[1]
                                 self$auto_max_outlier_cutoff <- tmp$caps[2]
+                                self$year_earliest = min(df$year)
+                                self$year_latest = max(df$year)
+                                self$number_of_geos = length(unique(df$geocode))
                                 self$data = df
 
                               },
