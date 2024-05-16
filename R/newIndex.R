@@ -239,6 +239,7 @@ newIndicator <- R6::R6Class("newIndicator",
                               weight = NULL,
                               banding_method = NULL,
                               imputation_type = NULL,
+                              type_of_data = NULL,
                               initialize = function(df,
                                                     domain,
                                                     ismorebetter,
@@ -256,6 +257,7 @@ newIndicator <- R6::R6Class("newIndicator",
                                 self$source <- unique(df$source)
                                 self$weight <- weight
                                 self$banding_method <- banding_method
+                                self$type_of_data = private$variable_type(df$value)
                                 tmp = private$get_capping(df$value)
                                 df$capped = tmp$values
                                 df = private$binband(df)
@@ -263,6 +265,7 @@ newIndicator <- R6::R6Class("newIndicator",
                                 self$auto_min_outlier_cutoff <- tmp$caps[1]
                                 self$auto_max_outlier_cutoff <- tmp$caps[2]
                                 self$data = df
+
                               },
                               viewDistribution = function(){
                                 require("dlookr")
@@ -310,6 +313,17 @@ newIndicator <- R6::R6Class("newIndicator",
                                   data[data > (hinges[2] + whisker)] <- caps[2]
                                 }
                                 list(values = data, caps = caps)
+                              },
+                              variable_type = function(data) {
+                                unique_values <- length(unique(data))
+                                total_values <- length(data)
+                                density <- unique_values / total_values
+
+                                if (density < 0.05 || unique_values < 10) {
+                                  return("Categorical")
+                                } else {
+                                  return("Continuous")
+                                }
                               }
                             )
 )
