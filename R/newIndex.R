@@ -169,7 +169,7 @@ newIndex <- R6::R6Class("newIndex",
                             meta = x$parent_table
                             meta$vcode = toupper(paste(meta$domain, meta$variablename))
                             meta$vcode = make.unique(abbreviate(abbreviate(toupper(meta$vcode), 3),3) )
-                            x = decompose_table(x$child_table, guid, geoparent, geocode, geoname)
+                            x = decompose_table(x$child_table, guid, geoparent, geocode)
                             geo = x$parent_table
                             data = x$child_table
                             x = dm(meta, geo, data) %>%
@@ -245,7 +245,7 @@ newIndex <- R6::R6Class("newIndex",
                             y = self$dm %>% dm_flatten_to_tbl(.start = imputed_pc) %>%
                               select(-guid)
                             z = z %>% left_join(y) %>%
-                              relocate(geoparent, geocode, geoname)
+                              relocate(geoparent, geocode)
                             return(z)
                           }
 
@@ -370,5 +370,5 @@ newIndicator <- R6::R6Class("newIndicator",
 )
 
 
-required_cols = c("geocode", "geoname", "admin_level", "variablename", "year", "value", "source")
+required_cols = c("geocode", "admin_level", "variablename", "year", "value", "source")
 
