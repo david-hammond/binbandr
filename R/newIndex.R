@@ -45,7 +45,7 @@ newIndex <- R6::R6Class("newIndex",
                                                       banding_method = "optimal"){
                                 options(error = NULL)
                                 df = df %>% distinct()
-                                test1 = setdiff(names(df), required_cols)
+                                test1 = setdiff(required_cols, names(df))
                                 test2 = vec_duplicate_detect(df %>% select(geocode, variablename, year))
                                 if(length(test1) > 0){
                                   stop(paste("Your data frame is missing the following required columns:", paste(test1, collapse = ",")))

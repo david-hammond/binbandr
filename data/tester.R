@@ -5,6 +5,9 @@
 # ni = newIndex$new("David", start_year = 2015, end_year = 2024)
 # tmp = split(all, factor(all$variablename))
 # for (i in tmp){
+#   i = i %>% group_by(geocode, variablename, year, admin_level, source) %>%
+#     summarise(value = mean(value)) %>%
+#     ungroup()
 #   ni$addIndicator(i,
 #                   domain = unique(i$variablename),
 #                   ismorebetter = 1,
@@ -16,12 +19,5 @@
 # ni$viewStructure()
 # ni$calculateIndex()
 # ni$viewERDiagram()
-#
-#
-# birds <- Node$new("Aves", vulgo = "Bird")
-# birds$AddChild("Neognathae", vulgo = "New Jaws", species = 10000)
-# birds$AddChild("Palaeognathae", vulgo = "Old Jaws", species = 60)
-# print(birds, "vulgo", "species")
-#
-# birds$species <- function(self) sum(sapply(self$children, function(x) x$species))
-# print(birds, "species")
+
+
