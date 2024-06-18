@@ -42,7 +42,8 @@ newIndex <- R6::R6Class("newIndex",
                                                       weight,
                                                       manual_min_outlier_cutoff = NULL,
                                                       manual_max_outlier_cutoff = NULL,
-                                                      banding_method = "optimal"){
+                                                      banding_method = "optimal",
+                                                      peg_year){
                                 options(error = NULL)
                                 df = df %>% distinct()
                                 test1 = setdiff(required_cols, names(df))
@@ -64,7 +65,8 @@ newIndex <- R6::R6Class("newIndex",
                                                                                       weight,
                                                                                       manual_min_outlier_cutoff,
                                                                                       manual_max_outlier_cutoff,
-                                                                                      banding_method))
+                                                                                      banding_method,
+                                                                                      peg_year = peg_year))
                                 df = last(self$indicators)$data
                                 df$ismorebetter = ismorebetter
                                 df$weight = weight
@@ -284,7 +286,8 @@ newIndicator <- R6::R6Class("newIndicator",
                                                     manual_min_outlier_cutoff = NULL,
                                                     manual_max_outlier_cutoff = NULL,
                                                     banding_method = "optimal",
-                                                    imputation_type = "mice"){
+                                                    imputation_type = "mice",
+                                                    peg_year){
                                 self$domain = domain
                                 self$ismorebetter = ismorebetter
                                 self$manual_min_outlier_cutoff = manual_min_outlier_cutoff #need to implement
@@ -298,7 +301,7 @@ newIndicator <- R6::R6Class("newIndicator",
                                 tmp = private$get_capping(df$value)
                                 df$capped = tmp$values
                                 df = private$binband(df)
-                                self$optimal_bins <- binning(df$value)
+                                self$optimal_bins <- binning(df$value[df$year == peg_year]) #TODO: Need to find when to do this, doesn't work if no 2022
                                 self$auto_min_outlier_cutoff <- tmp$caps[1]
                                 self$auto_max_outlier_cutoff <- tmp$caps[2]
                                 self$year_earliest = min(df$year)

@@ -14,10 +14,11 @@
 #                   weight = 1,
 #                   manual_min_outlier_cutoff = NULL,
 #                   manual_max_outlier_cutoff = NULL,
-#                   banding_method = "optimal")
+#                   banding_method = "optimal",
+#                   peg_year = 2022)
 # }
 # ni$viewStructure()
 # ni$calculateIndex()
 # ni$viewERDiagram()
-
-
+#
+#
