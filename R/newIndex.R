@@ -38,12 +38,8 @@ newIndex <- R6::R6Class("newIndex",
                               },
                               addIndicator = function(df,
                                                       domain,
-                                                      ismorebetter,
                                                       weight,
-                                                      manual_min_outlier_cutoff = NULL,
-                                                      manual_max_outlier_cutoff = NULL,
-                                                      banding_method = "optimal",
-                                                      peg_year){
+                                                      cd){
                                 options(error = NULL)
                                 df = df %>% distinct()
                                 test1 = setdiff(required_cols, names(df))
@@ -61,19 +57,12 @@ newIndex <- R6::R6Class("newIndex",
                                 self$indicators = c(self$indicators, newIndicator$new(df %>%
                                                                                       filter(between(year, self$start_year, self$end_year)),
                                                                                       domain,
-                                                                                      ismorebetter,
                                                                                       weight,
-                                                                                      manual_min_outlier_cutoff,
-                                                                                      manual_max_outlier_cutoff,
-                                                                                      banding_method,
-                                                                                      peg_year = peg_year))
+                                                                                      cd))
                                 df = last(self$indicators)$data
-                                df$ismorebetter = ismorebetter
+                                df$ismorebetter = cd$polarity
                                 df$weight = weight
                                 df$domain = domain
-                                df$lowercutoff = ifelse(is.null(manual_min_outlier_cutoff), last(self$indicators)$auto_min_outlier_cutoff)
-                                df$uppercutoff = ifelse(is.null(manual_max_outlier_cutoff), last(self$indicators)$auto_max_outlier_cutoff)
-                                df$banding_method = banding_method
                                 df$year_earliest = last(self$indicators)$year_earliest
                                 df$year_latest = last(self$indicators)$year_latest
                                 df$number_of_geos = last(self$indicators)$number_of_geos
@@ -86,9 +75,6 @@ newIndex <- R6::R6Class("newIndex",
                                                       ismorebetter,
                                                       admin_level,
                                                       weight,
-                                                      lowercutoff,
-                                                      uppercutoff,
-                                                      banding_method,
                                                       year_earliest,
                                                       year_latest,
                                                       number_of_geos)$parent_table
@@ -260,114 +246,35 @@ newIndex <- R6::R6Class("newIndex",
 
 newIndicator <- R6::R6Class("newIndicator",
                             lock_objects = FALSE,
+                            inherit = classdistr,
                             public = list(
                               domain = NULL,
-                              admin_level = NULL,
                               variablename = NULL,
                               source = NULL,
                               ismorebetter = NULL,
-                              optimal_bins = NULL,
-                              auto_min_outlier_cutoff = NULL,
-                              auto_max_outlier_cutoff = NULL,
-                              manual_min_outlier_cutoff = NULL,
-                              manual_max_outlier_cutoff = NULL,
                               data = NULL,
                               weight = NULL,
-                              banding_method = NULL,
-                              imputation_type = NULL,
-                              type_of_data = NULL,
-                              year_earliest = NULL,
-                              year_latest = NULL,
-                              number_of_geos = NULL,
                               initialize = function(df,
                                                     domain,
-                                                    ismorebetter,
                                                     weight,
-                                                    manual_min_outlier_cutoff = NULL,
-                                                    manual_max_outlier_cutoff = NULL,
-                                                    banding_method = "optimal",
-                                                    imputation_type = "mice",
-                                                    peg_year){
+                                                    cd){
                                 self$domain = domain
-                                self$ismorebetter = ismorebetter
-                                self$manual_min_outlier_cutoff = manual_min_outlier_cutoff #need to implement
-                                self$manual_max_outlier_cutoff = manual_max_outlier_cutoff
+                                self$ismorebetter = cd$polarity
                                 self$variablename <- unique(df$variablename)
                                 self$admin_level <- unique(df$admin_level)
                                 self$source <- unique(df$source)
                                 self$weight <- weight
-                                self$banding_method <- banding_method
-                                self$type_of_data = private$variable_type(df$value)
-                                tmp = private$get_capping(df$value)
-                                df$capped = tmp$values
-                                df = private$binband(df)
-                                self$optimal_bins <- binning(df$value[df$year == peg_year]) #TODO: Need to find when to do this, doesn't work if no 2022
-                                self$auto_min_outlier_cutoff <- tmp$caps[1]
-                                self$auto_max_outlier_cutoff <- tmp$caps[2]
                                 self$year_earliest = min(df$year)
                                 self$year_latest = max(df$year)
                                 self$number_of_geos = length(unique(df$geocode))
+                                self$likely_distribution = cd$likely_distribution
+                                self$recommended_normalisation = cd$recommended_normalisation
+                                self$recommended_breaks = cd$recommended_breaks
+                                self$number_of_classes = cd$number_of_classes
+                                self$normalised_values = piecewise_normalisation(df$value, cd$recommended_breaks, cd$polarity)
+                                self$percentiles = n_prank(df$value)
+                                df$banded = self$normalised_values
                                 self$data = df
-
-                              },
-                              viewDistribution = function(){
-                                require("dlookr")
-                                plot(self$optimal_bins)
-                              }
-                            ),
-                            private = list(
-                              binband = function(df,
-                                                 target = "value"){
-                                df = df %>%
-                                  mutate(bins = binning(.data$capped) %>% extract()) %>%
-                                  separate(.data$bins, c("lower", "upper"), sep = ",", remove = F) %>%
-                                  mutate(lower = parse_number(.data$lower),
-                                         upper = parse_number(.data$upper),
-                                         bins = as.numeric(.data$bins))
-                                nbins = max(df$bins)
-                                nbins = data.frame(bins = seq(1:nbins)) %>%
-                                  mutate(       bin_min_threshold = (.data$bins-1)/nbins,
-                                                bin_max_threshold = (.data$bins/nbins))
-                                df = df %>% left_join(nbins)
-                                df = df %>% group_by(.data$bins) %>%
-                                  mutate(banded = rescale(.data$capped, from = c(.data$lower[1], .data$upper[1]),
-                                                          to = c(.data$bin_min_threshold[1], .data$bin_max_threshold[1]))) %>%
-                                  ungroup() %>%
-                                  mutate(banded = round(.data$banded, 3))
-                                if(self$ismorebetter){
-                                  df$banded = 1 - df$banded
-                                }
-                                return(df)
-                              },
-                              get_capping = function(data, cap_ntiles = c(0.01, 0.99)) {
-                                #TODO - this can punish countries by assigning them a higher score.
-                                hinges <- quantile(data, probs = c(0.25, 0.75), na.rm = TRUE)
-                                caps <- quantile(data, probs = cap_ntiles, na.rm = TRUE)
-
-                                whisker <- 1.5 * diff(hinges)
-
-                                if(!is.null(self$manual_min_outlier_cutoff)){
-                                  data[data < self$manual_min_outlier_cutoff] <- self$manual_min_outlier_cutoff
-                                }else{
-                                  data[data < (hinges[1] - whisker)] <- caps[1]
-                                }
-                                if(!is.null(self$manual_max_outlier_cutoff)){
-                                  data[data > self$manual_max_outlier_cutoff] <- self$manual_max_outlier_cutoff
-                                }else{
-                                  data[data > (hinges[2] + whisker)] <- caps[2]
-                                }
-                                list(values = data, caps = caps)
-                              },
-                              variable_type = function(data) {
-                                unique_values <- length(unique(data))
-                                total_values <- length(data)
-                                density <- unique_values / total_values
-
-                                if (density < 0.05 || unique_values < 10) {
-                                  return("Categorical")
-                                } else {
-                                  return("Continuous")
-                                }
                               }
                             )
 )
