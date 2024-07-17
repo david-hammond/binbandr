@@ -26,216 +26,101 @@ newIndex <- R6::R6Class("newIndex",
                               name = NULL,
                               start_year = NULL,
                               end_year = NULL,
+                              peg_year = NULL,
                               indicators = list(),
                               tree = NULL,
-                              corpus = NULL,
+                              meta = NULL,
+                              data = NULL,
+                              regional = NULL,
                               dm = NULL,
                               indexflatdata = NULL,
-                              initialize = function(name, start_year, end_year){
+                              initialize = function(name, start_year, end_year, peg_year){
                                 self$name = name
                                 self$start_year = start_year
                                 self$end_year = end_year
+                                self$peg_year = peg_year
                               },
-                              addIndicator = function(df,
-                                                      domain,
-                                                      weight,
-                                                      cd){
-                                options(error = NULL)
-                                df = df %>% distinct()
-                                test1 = setdiff(required_cols, names(df))
-                                test2 = vec_duplicate_detect(df %>% select(geocode, variablename, year))
-                                if(length(test1) > 0){
-                                  stop(paste("Your data frame is missing the following required columns:", paste(test1, collapse = ",")))
-                                }
-                                if(sum(test2) > 0){
-                                  print(df[test2,])
-                                  stop("You have duplicated data in your data.frame, check the above entires, fix and retry")
-                                }
-                                df = df %>% select(required_cols)
-                                df$geoparent = substr(df$geocode,1,3)
-                                df = df %>% relocate(geoparent)
-                                self$indicators = c(self$indicators, newIndicator$new(df %>%
-                                                                                      filter(between(year, self$start_year, self$end_year)),
-                                                                                      domain,
-                                                                                      weight,
-                                                                                      cd))
-                                df = last(self$indicators)$data
-                                df$ismorebetter = cd$polarity
-                                df$weight = weight
-                                df$domain = domain
-                                df$year_earliest = last(self$indicators)$year_earliest
-                                df$year_latest = last(self$indicators)$year_latest
-                                df$number_of_geos = last(self$indicators)$number_of_geos
-                                self$corpus = self$corpus %>% rbind(df)
-                                tmp = decompose_table(self$corpus,
-                                                      vuid,
-                                                      domain,
+                              addIndicator = function(domain,
                                                       variablename,
                                                       source,
                                                       ismorebetter,
-                                                      admin_level,
-                                                      weight,
-                                                      year_earliest,
-                                                      year_latest,
-                                                      number_of_geos)$parent_table
-                                tmp$pathString = paste(self$name,
-                                                     tmp$domain,
-                                                     tmp$variablename,
-                                                     sep = "/")
-                                self$tree = as.Node(tmp)
-                                self$dm = private$raw_dm(self$corpus)
-                                names(self$indicators) = self$dm$meta$vcode
-
-                              },
-                              viewStructure = function(){
-                                SetFormat(self$tree, "weight", formatFun = function(x) FormatFixedDecimal(x, digits = 3))
-                                SetFormat(self$tree, "year_earliest", formatFun = function(x) FormatFixedDecimal(x, digits = 0))
-                                SetFormat(self$tree, "year_latest", formatFun = function(x) FormatFixedDecimal(x, digits = 0))
-                                SetFormat(self$tree, "number_of_geos", formatFun = function(x) FormatFixedDecimal(x, digits = 0))
-                                print(self$tree, "source", "weight", "year_earliest", "year_latest", "number_of_geos")
-                              },
-                              calculateIndex = function(export_to_db = FALSE){
-                                self$dm = private$raw_dm(self$corpus)
-                                self$dm = private$imputed_dm()
-                                self$indexflatdata = private$getFlatData()
-                                if(export_to_db){
-                                  con <- DBI::dbConnect(RSQLite::SQLite(), paste0(self$name, ".sqlite"))
-                                  copy_dm_to(con, self$dm, set_key_constraints = TRUE, temporary = F)
-                                  dbDisconnect(con)
+                                                      geocode,
+                                                      #region,
+                                                      year,
+                                                      value,
+                                                      weight){
+                                options(error = NULL)
+                                df = data.frame(geocode, year, value)
+                                region = countrycode(geocode, "iso3c", "region")
+                                test = duplicated(df)
+                                if(sum(test) > 0){
+                                  print(df[test,])
+                                  stop("You have duplicated data in your data.frame, check the above entires, fix and retry")
                                 }
+                                included_years = between(year, self$start_year, self$end_year)
+                                cmd <- sprintf("self$indicators  <- c(self$indicators , '%s' = newIndicator$new(domain = unique(domain),
+                                                                                      variablename = unique(variablename),
+                                                                                      source = unique(source),
+                                                                                      ismorebetter = ismorebetter,
+                                                                                      geocode = geocode[included_years],
+                                                                                      region = region[included_years],
+                                                                                      year = year[included_years],
+                                                                                      value = value[included_years],
+                                                                                      weight = weight,
+                                                                                      start_year =self$start_year,
+                                                                                      end_year = self$end_year,
+                                                                                      peg_year = self$peg_year))",
+                                               unique(variablename))
+                                eval(parse(text = cmd))
+                               tmp = last(self$indicators)$split_data()
+                               if(is.null(self$meta)){
+                                  self$meta = tmp$meta
+                                  self$data = tmp$data
+                                  self$regional = tmp$regional
 
+                               }else{
+                                 vid_max = max(self$meta$vid)
+                                 self$meta = self$meta %>% rbind(tmp$meta %>% mutate(vid = vid + vid_max))
+                                 self$regional = self$regional%>% rbind(tmp$regional %>% mutate(vid = vid + vid_max))
+                                 self$data = self$data %>% rbind(tmp$data %>%
+                                                                           mutate(vid = vid + vid_max))
+                               }
 
-                              },
-                              viewERDiagram = function(){
-                                self$dm %>% dm_draw()
-                              }
-                            ),
+                            },
+                            impute = function(){
+                              y = self$data
+                              y = y %>% complete(geocode, year, vid) %>%
+                                group_by(geocode) %>%
+                                fill(region, .direction = 'updown') %>%
+                                ungroup() %>%
+                                left_join(self$regional) %>%
+                                mutate(regional_average = ifelse(is.na(value), "*", "")) %>%
+                                mutate(value = ifelse(is.na(value), regional_mean_raw, value),
+                                       banded = ifelse(is.na(banded), regional_mean_banded, banded)) %>%
+                                select(-regional_mean_raw, -regional_mean_banded) %>%
+                                mutate(interpolated = replace_na(interpolated, ""))
+                              self$imputed = y
+                            },
+                            calculate_index = function(){
+                              self$impute()
+                              domain_scores = self$imputed %>% left_join(self$meta) %>%
+                                group_by(geocode, domain, year) %>%
+                                mutate(banded = weight * banded) %>%
+                                summarise(banded = sum(banded)/sum(weight), weight = sum(weight)) %>%
+                                ungroup() %>% mutate(domain = paste(domain,"Overall Score")) %>%
+                                rename(variablename = domain)
+                              overall_score = domain_scores %>%
+                                group_by(geocode, year) %>%
+                                summarise(banded = sum(banded)/sum(weight), weight = sum(weight)) %>%
+                                mutate(variablename = paste(self$name, "Overall Score")) %>%
+                                ungroup() %>%
+                                select(geocode, variablename, year, weight, banded)
+                              all = domain_scores %>% rbind(overall_score) %>%
+                                mutate(domain = self$name, value = banded, imputed = 0) %>%
+                                select(domain, variablename, geocode, year, value)
+                              self$index = all
+                        }),
                         private = list(
-                          fill_missing_values = function(df) {
-                            message("Interpolating...")
-                            df = df %>%
-                              group_by(vuid, guid) %>%
-                              complete(year = full_seq(year, 1)) %>%
-                              mutate(interpolated = zoo::na.approx(banded, na.rm = FALSE)) %>%
-                              fill(interpolated, .direction =  "updown") %>% #this doesn't extrapolate
-                              ungroup() %>%
-                              mutate(imputed = ifelse(is.na(banded), 1, 0),
-                                     banded = interpolated) %>%
-                              select(-interpolated) %>%
-                              complete(guid, vuid, year = full_seq(year, 1))
-
-
-                            raw_pivot =  df %>% group_by(vuid, guid, year) %>% summarise(banded = mean(banded)) %>%
-                              ungroup() %>% spread(vuid, banded)
-                            names(raw_pivot) = make.names(names(raw_pivot))
-                            message("Imputing...")
-                            imp = mice(raw_pivot[-c(1:2)], print = FALSE)
-                            raw_pivot[-c(1:2)] = complete(imp)
-                            raw_pivot = raw_pivot %>% gather(vuid, mice, -c(guid, year)) %>%
-                              mutate(vuid = parse_number(vuid))
-
-                            df = df %>% left_join(raw_pivot)
-                            df = df %>% mutate(imputed = ifelse(is.na(banded), 2, imputed),
-                                               banded = ifelse(is.na(banded), mice, banded)) %>%
-                              select(-mice)
-                            return(df)
-                          },
-                          raw_dm = function(df){
-                            x = decompose_table(df, vuid,
-                                                domain,
-                                                variablename,
-                                                source,
-                                                ismorebetter,
-                                                admin_level,
-                                                weight,
-                                                lowercutoff,
-                                                uppercutoff,
-                                                banding_method,
-                                                year_earliest,
-                                                year_latest,
-                                                number_of_geos)
-                            meta = x$parent_table
-                            meta$vcode = toupper(paste(meta$domain, meta$variablename))
-                            meta$vcode = make.unique(abbreviate(abbreviate(toupper(meta$vcode), 3),3) )
-                            x = decompose_table(x$child_table, guid, geoparent, geocode)
-                            geo = x$parent_table
-                            data = x$child_table
-                            x = dm(meta, geo, data) %>%
-                              dm_add_pk(meta, vuid) %>%
-                              dm_add_pk(geo, guid) %>%
-                              dm_add_fk(data, vuid, meta) %>%
-                              dm_add_fk(data, guid, geo)
-
-                            return(x)
-
-                          },
-                          imputed_dm = function(){
-                            imputed_data = private$fill_missing_values(self$dm$data)
-                            world_average = imputed_data %>% group_by(vuid, year) %>%
-                              summarise(mean_value = mean(value, na.rm = T),
-                                        mean_banded = mean(banded, na.rm = T)) %>%
-                              ungroup()
-                            imputed_pc = imputed_data %>% group_by(guid) %>%
-                              summarise(pc_imputed = sum(imputed > 1)/n())
-
-                            x = dm(meta = self$dm$meta, geo = self$dm$geo,
-                                   data = imputed_data, world_average) %>%
-                              dm_add_pk(meta, vuid) %>%
-                              dm_add_pk(geo, guid) %>%
-                              dm_add_fk(data, vuid, meta) %>%
-                              dm_add_fk(data, guid, geo) %>%
-                              dm_add_fk(world_average, vuid, meta)
-                            message("Calculating Index...")
-                            overall_scores = private$calculate_index(x)
-                            imp_key = data.frame(imputed = c(0,1,2),
-                                                 imptype = c("Original", "Interpolated/Extrapolated", "Multi Chain Imputation"),
-                                                 impcategory = c("None", "Cold Deck", "Hot Deck"))
-                            x = dm(meta = self$dm$meta, geo = self$dm$geo,
-                                   data = imputed_data, world_average,
-                                   overall_scores, imp_key, imputed_pc) %>%
-                              dm_add_pk(meta, vuid) %>%
-                              dm_add_pk(geo, guid) %>%
-                              dm_add_pk(imp_key, imputed) %>%
-                              dm_add_fk(data, vuid, meta) %>%
-                              dm_add_fk(data, guid, geo) %>%
-                              dm_add_fk(data, imputed, imp_key) %>%
-                              dm_add_fk(world_average, vuid, meta) %>%
-                              dm_add_fk(overall_scores, guid, geo) %>%
-                              dm_add_fk(imputed_pc, guid, geo) %>%
-                              dm_add_fk(overall_scores, imputed, imp_key)
-                            message("Done...")
-                            return(x)
-
-                          },
-                          calculate_index = function(x){
-                            domain_scores = x %>% dm_flatten_to_tbl(.start = data) %>%
-                              group_by(guid, domain, year) %>%
-                              mutate(banded = weight * banded) %>%
-                              summarise(banded = sum(banded)/sum(weight), weight = sum(weight)) %>%
-                              ungroup() %>% mutate(domain = paste(domain,"Overall Score")) %>%
-                              rename(variablename = domain)
-                            overall_score = domain_scores %>%
-                              group_by(guid, year) %>%
-                              summarise(banded = sum(banded)/sum(weight), weight = sum(weight)) %>%
-                              mutate(variablename = paste(ni$name, "Overall Score")) %>%
-                              ungroup() %>%
-                              select(guid, variablename, year, weight, banded)
-                            all = domain_scores %>% rbind(overall_score) %>%
-                              mutate(domain = self$name, value = banded, imputed = 0) %>%
-                              select(domain, variablename, guid, year, value, banded, imputed)
-                            return(all)
-                          },
-                          getFlatData = function(){
-                            x = self$dm %>% dm_flatten_to_tbl(.start = overall_scores) %>%
-                              select(-guid, -imputed)
-                            y = self$dm %>% dm_flatten_to_tbl(.start = data)
-                            z = x %>% rbind(y[,names(x)])
-                            y = self$dm %>% dm_flatten_to_tbl(.start = imputed_pc) %>%
-                              select(-guid)
-                            z = z %>% left_join(y) %>%
-                              relocate(geoparent, geocode)
-                            return(z)
-                          }
 
                         )
 
@@ -256,7 +141,7 @@ newIndicator <- R6::R6Class("newIndicator",
                               year = NULL,
                               value = NULL,
                               weight = NULL,
-                              normalised = NULL,
+                              normaliser = NULL,
                               interpolated = NULL,
                               initialize = function(domain,
                                                     variablename,
@@ -267,9 +152,11 @@ newIndicator <- R6::R6Class("newIndicator",
                                                     year,
                                                     value,
                                                     weight,
-                                                    normaliser,
                                                     start_year,
-                                                    end_year){
+                                                    end_year,
+                                                    peg_year,
+                                                    classint_preference = "jenks",
+                                                    num_classes_pref = NULL){
                                 self$domain = unique(domain)
                                 self$ismorebetter = ismorebetter
                                 self$variablename <- unique(variablename)
@@ -278,14 +165,18 @@ newIndicator <- R6::R6Class("newIndicator",
                                 self$year_earliest = min(year)
                                 self$year_latest = max(year)
                                 self$number_of_geos = length(unique(geocode))
-                                self$fitted_distribution = normaliser$fitted_distribution
-                                self$normaliser = normaliser
+
                                 ### get data
                                 data <- self$interpolate(geocode, region, year, value,
                                                     start_year, end_year)
+                                normaliser = distrnorm$new(data$value[data$year == peg_year],
+                                                                polarity = ismorebetter,
+                                                                classint_preference = classint_preference,
+                                                                num_classes_pref = num_classes_pref)
+                                self$fitted_distribution = normaliser$fitted_distribution
                                 self$value = data$value
                                 self$interpolated = data$interpolated
-                                self$normalised = normaliser$applyto(data$value)
+                                self$normaliser = normaliser$applyto(data$value)
                                 self$geocode = data$geocode
                                 self$region = data$region
                                 self$year = data$year
@@ -301,6 +192,7 @@ newIndicator <- R6::R6Class("newIndicator",
                                            ismorebetter = self$ismorebetter,
                                            weight = self$weight,
                                            fitted_distr = self$fitted_distribution,
+                                           normalisation_technique = self$normaliser$normalisation,
                                            bins = paste(levels(cut(
                                              self$normaliser$breaks,
                                              self$normaliser$breaks,
@@ -313,7 +205,7 @@ newIndicator <- R6::R6Class("newIndicator",
                                            region = self$region,
                                            value = self$value,
                                            year = self$year,
-                                           banded = self$normalised$normalised_data,
+                                           banded = self$normaliser$normalised_data,
                                            interpolated = self$interpolated) %>%
                                   group_by(variablename, region, year) %>%
                                   mutate(regional_mean_raw = mean(value),
@@ -331,16 +223,21 @@ newIndicator <- R6::R6Class("newIndicator",
                                                       ismorebetter,
                                                       weight,
                                                       fitted_distr,
+                                                      normalisation_technique,
                                                       bins,
                                                       earliest_year,
                                                       latest_year,
                                                       num_geos)
                                 meta = tmp$parent_table
-                                tmp = decompose_table(tmp$child_table, rid, vid, region, regional_mean_raw,
-                                                       regional_mean_banded)
-                                regional_data = tmp$parent_table
-                                data = tmp$child_table
-                                return(list(meta = meta, regional = regional_data, data = data))
+                                # tmp = decompose_table(tmp$child_table, rid, region, regional_mean_raw,
+                                #                        regional_mean_banded)
+                                regional = tmp$child_table %>%
+                                  select(vid, year, region, regional_mean_raw, regional_mean_banded) %>%
+                                  distinct()
+                                data = tmp$child_table %>%
+                                  select(-regional_mean_raw, -regional_mean_banded) %>%
+                                  distinct()
+                                return(list(meta = meta, regional = regional, data = data))
                               },
 
 
@@ -364,5 +261,5 @@ newIndicator <- R6::R6Class("newIndicator",
 )
 
 
-required_cols = c("geocode", "admin_level", "variablename", "year", "value", "source")
+
 

@@ -1,40 +1,60 @@
-# library(binbandr)
-library(tidyverse)
-all = rio::import("./data/all-banded.xlsx") %>% mutate(admin_level = "level0")
+# # library(binbandr)
+# library(tidyverse)
+# library(distrnorm)
+# library(dm)
+# all = rio::import("./data/all-banded.xlsx") %>% mutate(admin_level = "level0")
+#
+# test = all %>% filter(variablename == "climate change")
+#
+# x = newIndicator$new(domain = test$variablename,
+#                  variablename = test$variablename,
+#                  source = test$source,
+#                  ismorebetter = -1,
+#                  geocode = test$geocode,
+#                  region = test$geoname,
+#                  year = test$year,
+#                  value = test$value,
+#                  weight = 1,
+#                  start_year = 2014,
+#                  end_year = 2024,
+#                  peg_year = 2016)
+# x$normaliser$plot()
+# x$split_data()
+# test = all %>% filter(variablename == "climate change")
+# x = newIndex$new("myindex", 2014, 2024, 2015)
+#
+# test = test %>% filter(geocode != 'MKD')
+#
+# x$addIndicator(domain = test$variablename,
+#                variablename = test$variablename,
+#                source = test$source,
+#                ismorebetter = -1,
+#                geocode = test$geocode,
+#                #region = test$geoname,
+#                year = test$year,
+#                value = test$value,
+#                weight = 1)
+# test = test %>% filter(geocode != 'AFG')
+# x$addIndicator(domain = test$variablename,
+#                variablename = "david",
+#                source = test$source,
+#                ismorebetter = -1,
+#                geocode = test$geocode,
+#                #region = test$geoname,
+#                year = test$year,
+#                value = test$value,
+#                weight = 1)
+# x$calculate_index()
+# y = x$data
+# y = y %>% complete(geocode, year, vid) %>%
+#   group_by(geocode) %>%
+#   fill(region, .direction = 'updown') %>%
+#   ungroup() %>%
+#   left_join(x$regional) %>%
+#   mutate(regional_average = ifelse(is.na(value), "*", "")) %>%
+#   mutate(value = ifelse(is.na(value), regional_mean_raw, value),
+#          banded = ifelse(is.na(banded), regional_mean_banded, banded)) %>%
+#   select(-regional_mean_raw, -regional_mean_banded) %>%
+#   mutate(interpolated = replace_na(interpolated, "")) %>%
+#   left_join(x$meta)
 
-test = all %>% filter(variablename == "climate change")
-nm = distrnorm$new(test$value[test$year == 2015])
-x = newIndicator$new(domain = test$variablename,
-                 variablename = test$variablename,
-                 source = test$source,
-                 ismorebetter = 1,
-                 geocode = test$geocode,
-                 region = test$geoname,
-                 year = test$year,
-                 value = test$value,
-                 weight = 1,
-                 normaliser = nm,
-                 start_year = 2014,
-                 end_year = 2024)
-x$data
-#
-# ni = newIndex$new("David", start_year = 2015, end_year = 2024)
-# tmp = split(all, factor(all$variablename))
-# for (i in tmp){
-#   i = i %>% group_by(geocode, variablename, year, admin_level, source) %>%
-#     summarise(value = mean(value)) %>%
-#     ungroup()
-#   ni$addIndicator(i,
-#                   domain = unique(i$variablename),
-#                   ismorebetter = 1,
-#                   weight = 1,
-#                   manual_min_outlier_cutoff = NULL,
-#                   manual_max_outlier_cutoff = NULL,
-#                   banding_method = "optimal",
-#                   peg_year = 2022)
-# }
-# ni$viewStructure()
-# ni$calculateIndex()
-# ni$viewERDiagram()
-#
-#
