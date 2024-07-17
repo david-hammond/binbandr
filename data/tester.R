@@ -1,6 +1,22 @@
 # library(binbandr)
-# library(tidyverse)
-# all = rio::import("./data/all-banded.xlsx") %>% mutate(admin_level = "level0")
+library(tidyverse)
+all = rio::import("./data/all-banded.xlsx") %>% mutate(admin_level = "level0")
+
+test = all %>% filter(variablename == "climate change")
+nm = distrnorm$new(test$value[test$year == 2015])
+x = newIndicator$new(domain = test$variablename,
+                 variablename = test$variablename,
+                 source = test$source,
+                 ismorebetter = 1,
+                 geocode = test$geocode,
+                 region = test$geoname,
+                 year = test$year,
+                 value = test$value,
+                 weight = 1,
+                 normaliser = nm,
+                 start_year = 2014,
+                 end_year = 2024)
+x$data
 #
 # ni = newIndex$new("David", start_year = 2015, end_year = 2024)
 # tmp = split(all, factor(all$variablename))

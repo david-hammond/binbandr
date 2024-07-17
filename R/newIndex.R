@@ -246,35 +246,119 @@ newIndex <- R6::R6Class("newIndex",
 
 newIndicator <- R6::R6Class("newIndicator",
                             lock_objects = FALSE,
-                            inherit = classdistr,
                             public = list(
                               domain = NULL,
                               variablename = NULL,
                               source = NULL,
                               ismorebetter = NULL,
-                              data = NULL,
+                              geocode = NULL,
+                              region = NULL,
+                              year = NULL,
+                              value = NULL,
                               weight = NULL,
-                              initialize = function(df,
-                                                    domain,
+                              normalised = NULL,
+                              interpolated = NULL,
+                              initialize = function(domain,
+                                                    variablename,
+                                                    source,
+                                                    ismorebetter,
+                                                    geocode,
+                                                    region,
+                                                    year,
+                                                    value,
                                                     weight,
-                                                    cd){
-                                self$domain = domain
-                                self$ismorebetter = cd$polarity
-                                self$variablename <- unique(df$variablename)
-                                self$admin_level <- unique(df$admin_level)
-                                self$source <- unique(df$source)
+                                                    normaliser,
+                                                    start_year,
+                                                    end_year){
+                                self$domain = unique(domain)
+                                self$ismorebetter = ismorebetter
+                                self$variablename <- unique(variablename)
+                                self$source <- unique(source)
                                 self$weight <- weight
-                                self$year_earliest = min(df$year)
-                                self$year_latest = max(df$year)
-                                self$number_of_geos = length(unique(df$geocode))
-                                self$likely_distribution = cd$likely_distribution
-                                self$recommended_normalisation = cd$recommended_normalisation
-                                self$recommended_breaks = cd$recommended_breaks
-                                self$number_of_classes = cd$number_of_classes
-                                self$normalised_values = piecewise_normalisation(df$value, cd$recommended_breaks, cd$polarity)
-                                self$percentiles = n_prank(df$value)
-                                df$banded = self$normalised_values
-                                self$data = df
+                                self$year_earliest = min(year)
+                                self$year_latest = max(year)
+                                self$number_of_geos = length(unique(geocode))
+                                self$fitted_distribution = normaliser$fitted_distribution
+                                self$normaliser = normaliser
+                                ### get data
+                                data <- self$interpolate(geocode, region, year, value,
+                                                    start_year, end_year)
+                                self$value = data$value
+                                self$interpolated = data$interpolated
+                                self$normalised = normaliser$applyto(data$value)
+                                self$geocode = data$geocode
+                                self$region = data$region
+                                self$year = data$year
+                                tmp = self$split_data()
+                                self$meta = tmp$meta
+                                self$regional = tmp$regional
+                                self$data = tmp$data
+                              },
+                              combine_data = function(){
+                                data.frame(domain = self$domain,
+                                           variablename = self$variablename,
+                                           source = self$source,
+                                           ismorebetter = self$ismorebetter,
+                                           weight = self$weight,
+                                           fitted_distr = self$fitted_distribution,
+                                           bins = paste(levels(cut(
+                                             self$normaliser$breaks,
+                                             self$normaliser$breaks,
+                                             include.lowest = T)),
+                                             collapse = '\n'),
+                                           earliest_year = self$year_earliest,
+                                           latest_year = self$year_latest,
+                                           num_geos = self$number_of_geos,
+                                           geocode = self$geocode,
+                                           region = self$region,
+                                           value = self$value,
+                                           year = self$year,
+                                           banded = self$normalised$normalised_data,
+                                           interpolated = self$interpolated) %>%
+                                  group_by(variablename, region, year) %>%
+                                  mutate(regional_mean_raw = mean(value),
+                                          regional_mean_banded = mean(banded)) %>%
+                                  ungroup()
+
+
+                              },
+                              split_data = function(){
+                                x = self$combine_data()
+                                tmp = decompose_table(x, vid,
+                                                      domain,
+                                                      variablename,
+                                                      source,
+                                                      ismorebetter,
+                                                      weight,
+                                                      fitted_distr,
+                                                      bins,
+                                                      earliest_year,
+                                                      latest_year,
+                                                      num_geos)
+                                meta = tmp$parent_table
+                                tmp = decompose_table(tmp$child_table, rid, vid, region, regional_mean_raw,
+                                                       regional_mean_banded)
+                                regional_data = tmp$parent_table
+                                data = tmp$child_table
+                                return(list(meta = meta, regional = regional_data, data = data))
+                              },
+
+
+                              interpolate = function(geocode, region, year, value,
+                                                     start_year, end_year){
+                                tmp <- data.frame(geocode = geocode,
+                                                  region = region,
+                                                  year = year,
+                                                  value = value) %>%
+                                  complete(nesting(geocode, region), year = start_year:end_year) %>%
+                                  mutate(interpolated = zoo::na.approx(value, na.rm = FALSE)) %>%
+                                  fill(interpolated, .direction =  "updown") %>% #this doesn't extrapolate
+                                  ungroup()
+                                interp = is.na(tmp$value)
+                                tmp = tmp %>%
+                                  mutate(value = ifelse(is.na(value), interpolated, value))
+                                tmp$interpolated = ifelse(interp, "*", "")
+                                return(tmp)
                               }
                             )
 )
