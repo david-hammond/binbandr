@@ -50,6 +50,7 @@ newIndex <- R6::R6Class("newIndex",
                                                       year,
                                                       value,
                                                       weight){
+                                ###TODO MAKE ALL CHARACTERS
                                 options(error = NULL)
                                 df = data.frame(geocode, year, value)
                                 region = countrycode(geocode, "iso3c", "region")
