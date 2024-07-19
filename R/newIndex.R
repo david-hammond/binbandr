@@ -14,6 +14,7 @@
 #' @importFrom dm decompose_table dm dm_add_pk dm_add_fk dm_flatten_to_tbl dm_draw copy_dm_to
 #' @importFrom mice mice
 #' @importFrom vctrs vec_duplicate_detect
+#' @importFrom tidymodlr tidymodl
 #'
 #' @export
 #'
@@ -99,6 +100,9 @@ newIndex <- R6::R6Class("newIndex",
                                        banded = ifelse(is.na(banded), regional_mean_banded, banded)) %>%
                                 select(-regional_mean_raw, -regional_mean_banded) %>%
                                 mutate(interpolated = replace_na(interpolated, ""))
+                              #Still gotta mice
+                              #y = tidymodlr::tidymodl$new(x$imputed %>% select(geocode, year, vid, banded) %>% filter(!is.na(banded)), "vid", "banded")
+                              #this has duplications!!!!
                               self$imputed = y
                             },
                             calculate_index = function(){
@@ -110,6 +114,7 @@ newIndex <- R6::R6Class("newIndex",
                                 ungroup() %>% mutate(domain = paste(domain,"Overall Score")) %>%
                                 rename(variablename = domain)
                               overall_score = domain_scores %>%
+                                mutate(banded = weight * banded) %>%
                                 group_by(geocode, year) %>%
                                 summarise(banded = sum(banded)/sum(weight), weight = sum(weight)) %>%
                                 mutate(variablename = paste(self$name, "Overall Score")) %>%
@@ -117,7 +122,7 @@ newIndex <- R6::R6Class("newIndex",
                                 select(geocode, variablename, year, weight, banded)
                               all = domain_scores %>% rbind(overall_score) %>%
                                 mutate(domain = self$name, value = banded, imputed = 0) %>%
-                                select(domain, variablename, geocode, year, value)
+                                select(domain, variablename, geocode, year, value, weight)
                               self$index = all
                         }),
                         private = list(
@@ -248,8 +253,9 @@ newIndicator <- R6::R6Class("newIndicator",
                                                   year = year,
                                                   value = value) %>%
                                   complete(nesting(geocode, region), year = start_year:end_year) %>%
+                                  group_by(geocode, region) %>%
                                   mutate(interpolated = zoo::na.approx(value, na.rm = FALSE)) %>%
-                                  fill(interpolated, .direction =  "updown") %>% #this doesn't extrapolate
+                                  fill(interpolated, .direction =  "updown") %>%
                                   ungroup()
                                 interp = is.na(tmp$value)
                                 tmp = tmp %>%

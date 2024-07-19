@@ -12,9 +12,8 @@ non-outlier data
 \itemize{
 \item \href{#method-newIndex-new}{\code{newIndex$new()}}
 \item \href{#method-newIndex-addIndicator}{\code{newIndex$addIndicator()}}
-\item \href{#method-newIndex-viewStructure}{\code{newIndex$viewStructure()}}
-\item \href{#method-newIndex-calculateIndex}{\code{newIndex$calculateIndex()}}
-\item \href{#method-newIndex-viewERDiagram}{\code{newIndex$viewERDiagram()}}
+\item \href{#method-newIndex-impute}{\code{newIndex$impute()}}
+\item \href{#method-newIndex-calculate_index}{\code{newIndex$calculate_index()}}
 \item \href{#method-newIndex-clone}{\code{newIndex$clone()}}
 }
 }
@@ -23,7 +22,7 @@ non-outlier data
 \if{latex}{\out{\hypertarget{method-newIndex-new}{}}}
 \subsection{Method \code{new()}}{
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{newIndex$new(name, start_year, end_year)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{newIndex$new(name, start_year, end_year, peg_year)}\if{html}{\out{</div>}}
 }
 
 }
@@ -33,41 +32,33 @@ non-outlier data
 \subsection{Method \code{addIndicator()}}{
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{newIndex$addIndicator(
-  df,
   domain,
+  variablename,
+  source,
   ismorebetter,
-  weight,
-  manual_min_outlier_cutoff = NULL,
-  manual_max_outlier_cutoff = NULL,
-  banding_method = "optimal"
+  geocode,
+  year,
+  value,
+  weight
 )}\if{html}{\out{</div>}}
 }
 
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-newIndex-viewStructure"></a>}}
-\if{latex}{\out{\hypertarget{method-newIndex-viewStructure}{}}}
-\subsection{Method \code{viewStructure()}}{
+\if{html}{\out{<a id="method-newIndex-impute"></a>}}
+\if{latex}{\out{\hypertarget{method-newIndex-impute}{}}}
+\subsection{Method \code{impute()}}{
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{newIndex$viewStructure()}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{newIndex$impute()}\if{html}{\out{</div>}}
 }
 
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-newIndex-calculateIndex"></a>}}
-\if{latex}{\out{\hypertarget{method-newIndex-calculateIndex}{}}}
-\subsection{Method \code{calculateIndex()}}{
+\if{html}{\out{<a id="method-newIndex-calculate_index"></a>}}
+\if{latex}{\out{\hypertarget{method-newIndex-calculate_index}{}}}
+\subsection{Method \code{calculate_index()}}{
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{newIndex$calculateIndex(export_to_db = FALSE)}\if{html}{\out{</div>}}
-}
-
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-newIndex-viewERDiagram"></a>}}
-\if{latex}{\out{\hypertarget{method-newIndex-viewERDiagram}{}}}
-\subsection{Method \code{viewERDiagram()}}{
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{newIndex$viewERDiagram()}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{newIndex$calculate_index()}\if{html}{\out{</div>}}
 }
 
 }
