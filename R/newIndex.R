@@ -15,6 +15,7 @@
 #' @importFrom mice mice
 #' @importFrom vctrs vec_duplicate_detect
 #' @importFrom tidymodlr tidymodl
+#' @importFrom countrycode countrycode
 #'
 #' @export
 #'
@@ -50,16 +51,34 @@ newIndex <- R6::R6Class("newIndex",
                                                       year,
                                                       value,
                                                       weight){
-                                ###TODO MAKE ALL CHARACTERS
+
+                                domain = as.character(factor(domain))
+                                variablename = as.character(factor(variablename))
+                                ismorebetter = as.numeric(ismorebetter)
+                                geocode = as.character(factor(geocode))
+                                year = as.numeric(year)
+                                value = as.numeric(value)
+                                weight = as.numeric(weight)
+                                ### Validity checks
+                                stopifnot("You have undefined geocodes starting with '@'. Please remove and re-run" =
+                                            sum(grepl("@", geocode)) == 0)
+
                                 options(error = NULL)
-                                df = data.frame(geocode, year, value)
-                                region = countrycode(geocode, "iso3c", "region")
+                                df = data.frame(geocode, year)
                                 test = duplicated(df)
                                 if(sum(test) > 0){
                                   print(df[test,])
                                   stop("You have duplicated data in your data.frame, check the above entires, fix and retry")
                                 }
+
+                                #get regions
+                                region_key = match(geocode, regions$geocode)
+                                region = regions$gpi_region[region_key]
+
+                                # get years
                                 included_years = between(year, self$start_year, self$end_year)
+
+                                #make indicator
                                 cmd <- sprintf("self$indicators  <- c(self$indicators , '%s' = newIndicator$new(domain = unique(domain),
                                                                                       variablename = unique(variablename),
                                                                                       source = unique(source),
