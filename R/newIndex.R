@@ -35,7 +35,7 @@ newIndex <- R6::R6Class("newIndex",
                               data = NULL,
                               regional = NULL,
                               dm = NULL,
-                              indexflatdata = NULL,
+                              percentage_imputed = NULL,
                               initialize = function(name, start_year, end_year, peg_year){
                                 self$name = name
                                 self$start_year = start_year
@@ -44,6 +44,7 @@ newIndex <- R6::R6Class("newIndex",
                               },
                               addIndicator = function(domain,
                                                       variablename,
+                                                      description,
                                                       source,
                                                       ismorebetter,
                                                       geocode,
@@ -52,10 +53,12 @@ newIndex <- R6::R6Class("newIndex",
                                                       value,
                                                       weight){
 
-                                domain = as.character(factor(domain))
-                                variablename = as.character(factor(variablename))
+                                domain = as.character(factor(domain[1]))
+                                variablename = as.character(factor(variablename[1]))
                                 ismorebetter = as.numeric(ismorebetter)
+                                description = as.character(factor(description[1]))
                                 geocode = as.character(factor(geocode))
+                                source = as.character(factor(source[1]))
                                 year = as.numeric(year)
                                 value = as.numeric(value)
                                 weight = as.numeric(weight)
@@ -93,23 +96,45 @@ newIndex <- R6::R6Class("newIndex",
                                                                                       peg_year = self$peg_year))",
                                                unique(variablename))
                                 eval(parse(text = cmd))
-                               tmp = last(self$indicators)$split_data()
-                               if(is.null(self$meta)){
+
+
+                            },
+                            compile = function(){
+                              self$meta = self$data = self$regional = self$tree = NULL
+                              for(i in self$indicators){
+                                tmp = i$split_data()
+                                if(is.null(self$meta)){
                                   self$meta = tmp$meta
                                   self$data = tmp$data
-                                  self$regional = tmp$regional
+                                  self$regional = tmp$regional %>% filter(complete.cases(region))
 
-                               }else{
-                                 vid_max = max(self$meta$vid)
-                                 self$meta = self$meta %>% rbind(tmp$meta %>% mutate(vid = vid + vid_max))
-                                 self$regional = self$regional%>% rbind(tmp$regional %>% mutate(vid = vid + vid_max))
-                                 self$data = self$data %>% rbind(tmp$data %>%
-                                                                           mutate(vid = vid + vid_max))
-                               }
+                                }else{
+                                  vid_max = max(self$meta$vid)
+                                  self$meta = self$meta %>% rbind(tmp$meta %>% mutate(vid = vid + vid_max))
+                                  self$regional = self$regional%>% rbind(tmp$regional %>% mutate(vid = vid + vid_max)) %>% filter(complete.cases(region))
+                                  self$data = self$data %>% rbind(tmp$data %>%
+                                                                    mutate(vid = vid + vid_max))
+                                }
+                              }
+                              tmp = self$meta
+                              tmp$pathString = paste(self$name,
+                                                     self$meta$domain,
+                                                     self$meta$variablename,
+                                                     sep = "/")
+                              self$tree = as.Node(tmp)
 
+                            },
+                            viewStructure = function(){
+                              self$compile()
+                              SetFormat(self$tree, "weight", formatFun = function(x) FormatFixedDecimal(x, digits = 3))
+                              SetFormat(self$tree, "year_earliest", formatFun = function(x) FormatFixedDecimal(x, digits = 0))
+                              SetFormat(self$tree, "year_latest", formatFun = function(x) FormatFixedDecimal(x, digits = 0))
+                              SetFormat(self$tree, "number_of_geos", formatFun = function(x) FormatFixedDecimal(x, digits = 0))
+                              print(self$tree, "source", "weight", "year_earliest", "year_latest", "number_of_geos")
                             },
                             impute = function(){
                               y = self$data
+                              message("Calculating Regional Avergages")
                               y = y %>% complete(geocode, year, vid) %>%
                                 group_by(geocode) %>%
                                 fill(region, .direction = 'updown') %>%
@@ -120,13 +145,38 @@ newIndex <- R6::R6Class("newIndex",
                                        banded = ifelse(is.na(banded), regional_mean_banded, banded)) %>%
                                 select(-regional_mean_raw, -regional_mean_banded) %>%
                                 mutate(interpolated = replace_na(interpolated, ""))
-                              #Still gotta mice
-                              #y = tidymodlr::tidymodl$new(x$imputed %>% select(geocode, year, vid, banded) %>% filter(!is.na(banded)), "vid", "banded")
-                              #this has duplications!!!!
-                              self$imputed = y
+
+                              tmp = y %>% select(geocode, year, vid, banded)%>% filter(!is.na(banded))
+                              print("1")
+                              tmp = tidymodl$new(tmp, "vid", "banded")
+                              message("Calculating additional missing values...can take a few minutes")
+                              tmp = tmp$xgb_impute()
+                              print("3")
+                              tmp$xgboost = ifelse(is.na(tmp$banded), "*", "")
+                              tmp$vid = as.integer(tmp$vid)
+                              print("Got here")
+                              y = y %>% left_join(tmp)
+                              y$banded[is.na(y$banded)] = y$yhat[is.na(y$banded)]
+                              y = y %>% select(-yhat)
+                              pos = y$regional_average == "*" & is.na(y$value)
+                              y$regional_average[pos] = ""
+                              y$original = "*"
+                              y$original[y$regional_average == "*"] = ""
+                              y$original[y$interpolated == "*"] = ""
+                              y$original[y$xgboost == "*"] = ""
+                              y$test = paste0(y$interpolated, y$regional_average, y$xgboost, y$original)
+                              y = y %>% dplyr::select(-test)
+                              z = y %>% gather("data_type", "star", -c(1:6)) %>%
+                                filter(star == "*") %>%
+                                dplyr::select(-star)
+                              self$imputed = z
+                              z = z %>% group_by(geocode) %>% summarise(imputed = sum(data_type %in% c("original", "interpolated"))/n())
+                              self$percentage_imputed = z
                             },
                             calculate_index = function(){
+                              self$compile()
                               self$impute()
+
                               domain_scores = self$imputed %>% left_join(self$meta) %>%
                                 group_by(geocode, domain, year) %>%
                                 mutate(banded = weight * banded) %>%
@@ -144,6 +194,23 @@ newIndex <- R6::R6Class("newIndex",
                                 mutate(domain = self$name, value = banded, imputed = 0) %>%
                                 select(domain, variablename, geocode, year, value, weight)
                               self$index = all
+                              self$get_dm()
+                        },
+                        get_dm = function(){
+                          geo1 = decompose_table(self$imputed %>%
+                                                   left_join(self$percentage_imputed), gid, geocode, region, imputed)
+                          dmd = dm(meta = self$meta, geo = geo1$parent_table,
+                                   regional = self$regional,
+                                   data = geo1$child_table) %>%
+                            dm_add_pk(meta, vid) %>%
+                            dm_add_pk(geo, gid) %>%
+                            dm_add_fk(data, gid, geo) %>%
+                            dm_add_fk(data, vid, meta) %>%
+                            dm_add_fk(regional, vid, meta)
+                          self$dm = dmd
+                          self$dm %>% dm_draw(view_type = 'all')
+
+
                         }),
                         private = list(
 
